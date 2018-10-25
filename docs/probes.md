@@ -1,5 +1,3 @@
-# Probes
-
 Probes are defined in `patterdale.yml` and are specific to a database.
 If you want to run the same probe against multiple databases, simply duplication the definition (e.g _SELECT 1 FROM DUAL_).
 
@@ -33,9 +31,15 @@ Using the above configuration, the probe will result in a line on the applicatio
 
 `database_up{database="myDB2",query="SELECT 1 FROM DUAL"} 1.0`
 
-or
+if the query was successful
 
 `database_up{database="myDB2",query="SELECT 1 FROM DUAL"} 0.0`
+
+if the query was unsuccessful
+
+`database_up{database="myDB2",query="SELECT 1 FROM DUAL"} -1.0`
+
+if the query wasn't executed succesfully against the database
 
 This conforms to the [Prometheus](https://github.com/prometheus/prometheus) standard.
 

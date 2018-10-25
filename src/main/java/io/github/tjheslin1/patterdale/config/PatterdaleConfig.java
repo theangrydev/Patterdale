@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Thomas Heslin <tjheslin1@gmail.com>.
+ * Copyright 2018 Thomas Heslin <tjheslin1@gmail.com>.
  *
  * This file is part of Patterdale-jvm.
  *
@@ -29,6 +29,7 @@ import java.util.Map;
 public class PatterdaleConfig extends ValueType {
     public int httpPort;
     public long cacheDuration;
+    public int probeConnectionWaitInSeconds;
     public DatabaseDefinition[] databases;
     public Probe[] probes;
     public Map<String, String> connectionPool;

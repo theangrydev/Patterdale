@@ -20,6 +20,7 @@ import static io.github.tjheslin1.patterdale.metrics.probe.Probe.probe;
 import static java.lang.String.format;
 import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
+import static java.util.Collections.singletonMap;
 
 public class ConfigUnmarshallerTest implements WithAssertions, WithMockito {
 
@@ -66,13 +67,15 @@ public class ConfigUnmarshallerTest implements WithAssertions, WithMockito {
         expectedConfig.httpPort = 7001;
         expectedConfig.cacheDuration = 60;
         expectedConfig.databases = new DatabaseDefinition[]{
-                databaseDefinition(NAME, USER, JDBC_URL, singletonList("healthCheck")),
+                databaseDefinition(NAME, USER, JDBC_URL, singletonList("healthCheck"), singletonMap("label", "value")),
                 databaseDefinition(NAME_2, USER, JDBC_URL_2, asList("healthCheck", "slowestQueries"))
         };
 
         HashMap<String, String> connectionPoolProperties = new HashMap<>();
         connectionPoolProperties.put("maxSize", "5");
         connectionPoolProperties.put("minIdle", "1");
+        connectionPoolProperties.put("maxConnectionRetries", "10");
+        connectionPoolProperties.put("connectionRetryDelayInSeconds", "60");
         expectedConfig.connectionPool = connectionPoolProperties;
 
         expectedConfig.probes = new Probe[]{

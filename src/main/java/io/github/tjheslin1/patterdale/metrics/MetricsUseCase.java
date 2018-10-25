@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Thomas Heslin <tjheslin1@gmail.com>.
+ * Copyright 2018 Thomas Heslin <tjheslin1@gmail.com>.
  *
  * This file is part of Patterdale-jvm.
  *
@@ -17,30 +17,86 @@
  */
 package io.github.tjheslin1.patterdale.metrics;
 
+import io.github.tjheslin1.patterdale.config.RuntimeParameters;
 import io.github.tjheslin1.patterdale.metrics.probe.OracleSQLProbe;
 import io.github.tjheslin1.patterdale.metrics.probe.ProbeResult;
+import org.slf4j.Logger;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
+import static io.github.tjheslin1.patterdale.metrics.probe.ProbeResult.failedProbe;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static java.util.stream.Collectors.toList;
 
 public class MetricsUseCase {
 
+    private final Logger logger;
     private final List<OracleSQLProbe> probes;
+    private final RuntimeParameters runtimeParameters;
+    private final Supplier<ExecutorService> executorServiceSupplier;
 
-    public MetricsUseCase(List<OracleSQLProbe> probes) {
+    public MetricsUseCase(Logger logger, List<OracleSQLProbe> probes, RuntimeParameters runtimeParameters, Supplier<ExecutorService> executorServiceSupplier) {
+        this.logger = logger;
         this.probes = probes;
+        this.runtimeParameters = runtimeParameters;
+        this.executorServiceSupplier = executorServiceSupplier;
     }
 
     public List<ProbeResult> scrapeMetrics() {
-        return probes.stream()
-                .flatMap(this::executeProbes)
+        ExecutorService executor = executorServiceSupplier.get();
+
+        List<ProbeWithFuture> eventualProbeResults = probes.stream()
+                .map(probe -> new ProbeWithFuture(probe, executor.submit(new ScrapeProbe(probe))))
+                .collect(toList());
+
+        executor.shutdown();
+        try {
+            executor.awaitTermination(runtimeParameters.probeConnectionWaitInSeconds(), SECONDS);
+        } catch (InterruptedException e) {
+            logger.warn("Interrupted while awaiting termination", e);
+            Thread.currentThread().interrupt();
+        }
+        try {
+            return collectProbeResults(eventualProbeResults);
+        } catch (Exception e) {
+            logger.error("Uncaught exception while scraping metrics", e);
+            return failedProbeResults().collect(toList());
+        }
+    }
+
+    private List<ProbeResult> collectProbeResults(List<ProbeWithFuture> eventualProbeResults) {
+        return eventualProbeResults.stream()
+                .flatMap(this::eventualResult)
                 .collect(toList());
     }
 
-    private Stream<ProbeResult> executeProbes(OracleSQLProbe oracleSQLProbe) {
-        return oracleSQLProbe.probe().stream();
+    private Stream<ProbeResult> eventualResult(ProbeWithFuture eventualResult) {
+        try {
+            // the results are already there because of the await termination but we still need a timeout here for some reason
+            return eventualResult.future.get(1, SECONDS).stream();
+        } catch (Exception e) {
+            logger.error("Uncaught exception while scraping metrics for " + eventualResult.probe.probeDefinition(), e);
+            return Stream.of(failedProbe(eventualResult.probe.probeDefinition()));
+        }
+    }
+
+    private Stream<ProbeResult> failedProbeResults() {
+        return probes.stream()
+                .map(probe -> failedProbe(probe.probeDefinition()));
+    }
+
+    private static class ProbeWithFuture {
+        public final OracleSQLProbe probe;
+        public final Future<List<ProbeResult>> future;
+
+        private ProbeWithFuture(OracleSQLProbe probe, Future<List<ProbeResult>> future) {
+            this.probe = probe;
+            this.future = future;
+        }
+
     }
 }
-

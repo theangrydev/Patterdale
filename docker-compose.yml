@@ -1,0 +1,41 @@
+version: '3.3'
+
+services:
+  prometheus:
+    image: prom/prometheus:v1.7.2
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '-config.file=/etc/prometheus/prometheus.yml'
+      - '-storage.local.path=/prometheus'
+    links:
+      - patterdale
+
+  patterdale:
+    image: tjheslin1/patterdale:DEV-SNAPSHOT
+    ports:
+      - "7001:7001"
+    volumes:
+      - ./repo/ojdbc7.jar:/app/ojdbc7.jar
+      - ./src/test/resources:/config
+      - ./src/test/resources:/passwords
+    command:
+      - 'java'
+      - '-jar'
+      - '-Dlogback.configurationFile=/config/logback.xml'
+      - '-Dconfig.file=/config/patterdale.yml'
+      - '-Dstatus.page=/config/patterdale.yml'
+      - '-Dpasswords.file=/passwords/passwords.yml'
+      - 'patterdale-all.jar'
+
+  oracle1:
+    image: sath89/oracle-12c
+    ports:
+      - "1522:1521"
+
+  oracle2:
+    image: sath89/oracle-12c
+    ports:
+      - "1523:1521"

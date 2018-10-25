@@ -37,7 +37,7 @@ public class ConventionAnalysisTest implements WithAssertions {
     public void todosMustReferenceAGitIssueInOpenStateOnly() throws Exception {
         GitIssues gitIssues = new GitIssues("tjheslin1", "Westie");
         List<Violation> violations = new GitIssueAnalyser(gitIssues, "ISSUE-" + WestieRegexes.EXTRACT_NUMBER_REGEX)
-                .todosAreInOpenState(WORKING_DIR, singletonList("ojdbc7.jar"));
+                .todosAreInOpenState(WORKING_DIR);
 
         assertThat(violations).isEmpty();
     }
@@ -77,7 +77,7 @@ public class ConventionAnalysisTest implements WithAssertions {
     @Test
     public void correctDockerImageVersionIsReferenced() throws Exception {
         String versionLine = FileUtils.readLines(new File("build.gradle"), UTF_8)
-                .stream().filter(line -> line.contains("version '"))
+                .stream().filter(line -> line.startsWith("version '"))
                 .findFirst().get();
         String buildVersion = versionLine.substring("version '".length(), versionLine.length() - 1);
 

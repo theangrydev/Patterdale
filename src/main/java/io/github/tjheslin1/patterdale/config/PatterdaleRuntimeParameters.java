@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Thomas Heslin <tjheslin1@gmail.com>.
+ * Copyright 2018 Thomas Heslin <tjheslin1@gmail.com>.
  *
  * This file is part of Patterdale-jvm.
  *
@@ -15,9 +15,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.github.tjheslin1.patterdale;
+package io.github.tjheslin1.patterdale.config;
 
-import io.github.tjheslin1.patterdale.config.PatterdaleConfig;
+import io.github.tjheslin1.patterdale.ValueType;
 import io.github.tjheslin1.patterdale.metrics.probe.DatabaseDefinition;
 import io.github.tjheslin1.patterdale.metrics.probe.Probe;
 
@@ -35,28 +35,40 @@ public class PatterdaleRuntimeParameters extends ValueType implements RuntimePar
 
     private final int httpPort;
     private final long cacheDuration;
+    private final int probeConnectionWaitInSeconds;
     private final List<DatabaseDefinition> databases;
+    private final List<Probe> probes;
     private final int connectionPoolMaxSize;
     private final int connectionPoolMinIdle;
-    private final List<Probe> probes;
+    private final int maxConnectionRetries;
+    private final long connectionRetryDelayInSeconds;
 
-    public PatterdaleRuntimeParameters(int httpPort, long cacheDuration, List<DatabaseDefinition> databases, int connectionPoolMaxSize, int connectionPoolMinIdle, List<Probe> probes) {
+    public PatterdaleRuntimeParameters(int httpPort, long cacheDuration, int probeConnectionWaitInSeconds, List<DatabaseDefinition> databases, int connectionPoolMaxSize, int connectionPoolMinIdle, List<Probe> probes, int maxConnectionRetries, long connectionRetryDelayInSeconds) {
         this.httpPort = httpPort;
         this.cacheDuration = cacheDuration;
+        this.probeConnectionWaitInSeconds = probeConnectionWaitInSeconds;
         this.databases = databases;
         this.connectionPoolMaxSize = connectionPoolMaxSize;
         this.connectionPoolMinIdle = connectionPoolMinIdle;
         this.probes = probes;
+        this.maxConnectionRetries = maxConnectionRetries;
+        this.connectionRetryDelayInSeconds = connectionRetryDelayInSeconds;
     }
 
     public static PatterdaleRuntimeParameters patterdaleRuntimeParameters(PatterdaleConfig config) {
+        if(config.httpPort <= 0)
+            throw new IllegalArgumentException("`httpPort` must be set to a positive integer value");
+
         return new PatterdaleRuntimeParameters(
                 config.httpPort,
                 config.cacheDuration,
+                config.probeConnectionWaitInSeconds,
                 asList(config.databases),
-                integerParameterOrBlowUp(config.connectionPool, "maxSize"),
-                integerParameterOrBlowUp(config.connectionPool, "minIdle"),
-                asList(config.probes));
+                integerParameterOrDefault(config.connectionPool, "maxSize", 5),
+                integerParameterOrDefault(config.connectionPool, "minIdle", 1),
+                asList(config.probes),
+                integerParameterOrDefault(config.connectionPool, "maxConnectionRetries", 10),
+                integerParameterOrDefault(config.connectionPool, "connectionRetryDelayInSeconds", 60));
     }
 
     /**
@@ -80,6 +92,11 @@ public class PatterdaleRuntimeParameters extends ValueType implements RuntimePar
         return cacheDuration;
     }
 
+    @Override
+    public int probeConnectionWaitInSeconds() {
+        return probeConnectionWaitInSeconds;
+    }
+
     /**
      * @return The listed database definitions.
      */
@@ -89,7 +106,7 @@ public class PatterdaleRuntimeParameters extends ValueType implements RuntimePar
     }
 
     /**
-     * @return The listed probe definitions.
+     * @return The listed probes definitions.
      */
     @Override
     public List<Probe> probes() {
@@ -112,13 +129,29 @@ public class PatterdaleRuntimeParameters extends ValueType implements RuntimePar
         return connectionPoolMinIdle;
     }
 
-    private static int integerParameterOrBlowUp(Map<String, String> config, String parameter) {
+    /**
+     * @return The number of retry attempts to connect to each database.
+     */
+    @Override
+    public int maxConnectionRetries() {
+        return maxConnectionRetries;
+    }
+
+    /**
+     * @return The delay between database connection retries.
+     */
+    @Override
+    public long connectionRetryDelayInSeconds() {
+        return connectionRetryDelayInSeconds;
+    }
+
+    private static int integerParameterOrDefault(Map<String, String> config, String parameter, int defaultValue) {
         if (config == null) {
             throw new IllegalStateException(format("Parent value of field '%s' not present in config.file provided.", parameter));
         }
         String paramValue = config.get(parameter);
         if (paramValue == null) {
-            throw new IllegalStateException(format("Expected a value for field '%s' based on config.file provided.", parameter));
+            return defaultValue;
         }
         return Integer.parseInt(paramValue);
     }

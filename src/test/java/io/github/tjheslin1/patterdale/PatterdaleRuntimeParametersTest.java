@@ -1,6 +1,7 @@
 package io.github.tjheslin1.patterdale;
 
 import io.github.tjheslin1.patterdale.config.PatterdaleConfig;
+import io.github.tjheslin1.patterdale.config.PatterdaleRuntimeParameters;
 import io.github.tjheslin1.patterdale.metrics.probe.DatabaseDefinition;
 import io.github.tjheslin1.patterdale.metrics.probe.Probe;
 import org.assertj.core.api.WithAssertions;
@@ -9,7 +10,7 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.List;
 
-import static io.github.tjheslin1.patterdale.PatterdaleRuntimeParameters.patterdaleRuntimeParameters;
+import static io.github.tjheslin1.patterdale.config.PatterdaleRuntimeParameters.patterdaleRuntimeParameters;
 import static io.github.tjheslin1.patterdale.metrics.probe.DatabaseDefinition.databaseDefinition;
 import static io.github.tjheslin1.patterdale.metrics.probe.Probe.probe;
 import static java.util.Arrays.asList;
@@ -22,20 +23,29 @@ public class PatterdaleRuntimeParametersTest implements WithAssertions {
         PatterdaleRuntimeParameters expectedParameters = new PatterdaleRuntimeParameters(
                 HTTP_PORT,
                 CACHE_DURATION,
+                PROBE_CONNECTION_WAIT_IN_SECONDS,
                 DATABASES,
                 MAX_SIZE,
                 MIN_IDLE,
-                asList(PROBE_1, PROBE_2));
+                asList(PROBE_1, PROBE_2),
+                MAX_CONNECTION_RETRIES,
+                CONNECTION_RETRY_DELAY_IN_SECONDS);
 
-        PatterdaleRuntimeParameters actualParameters = patterdaleRuntimeParameters(exampleConfig());
+        PatterdaleRuntimeParameters actualParameters = patterdaleRuntimeParameters(exampleConfig(HTTP_PORT));
         assertThat(actualParameters).isEqualTo(expectedParameters);
     }
 
-    private static PatterdaleConfig exampleConfig() {
+    @Test(expected = IllegalArgumentException.class)
+    public void httpPortMustBeSet() throws Exception {
+        patterdaleRuntimeParameters(exampleConfig(0));
+    }
+
+    private static PatterdaleConfig exampleConfig(int httpPort) {
         PatterdaleConfig config = new PatterdaleConfig();
 
-        config.httpPort = HTTP_PORT;
+        config.httpPort = httpPort;
         config.cacheDuration = CACHE_DURATION;
+        config.probeConnectionWaitInSeconds = PROBE_CONNECTION_WAIT_IN_SECONDS;
 
         config.databases = new DatabaseDefinition[]{
                 databaseDefinition(NAME, USER, JDBC_URL, singletonList(PROBE_NAME_1)),
@@ -49,13 +59,17 @@ public class PatterdaleRuntimeParametersTest implements WithAssertions {
         HashMap<String, String> connectionPoolProperties = new HashMap<>();
         connectionPoolProperties.put("maxSize", Integer.toString(MAX_SIZE));
         connectionPoolProperties.put("minIdle", Integer.toString(MIN_IDLE));
+        connectionPoolProperties.put("maxConnectionRetries", Integer.toString(MAX_CONNECTION_RETRIES));
+        connectionPoolProperties.put("connectionRetryDelayInSeconds", Integer.toString(CONNECTION_RETRY_DELAY_IN_SECONDS));
         config.connectionPool = connectionPoolProperties;
 
         return config;
     }
 
+
     private static final int HTTP_PORT = 7000;
     private static final long CACHE_DURATION = 60;
+    private static final int PROBE_CONNECTION_WAIT_IN_SECONDS = 10;
 
     private static final String NAME = "test";
     private static final String NAME_2 = "test2";
@@ -75,6 +89,8 @@ public class PatterdaleRuntimeParametersTest implements WithAssertions {
 
     private static final int MAX_SIZE = 5;
     private static final int MIN_IDLE = 1;
+    private static final int MAX_CONNECTION_RETRIES = 5;
+    private static final int CONNECTION_RETRY_DELAY_IN_SECONDS = 60;
 
     private static final List<DatabaseDefinition> DATABASES = asList(
             databaseDefinition(NAME, USER, JDBC_URL, singletonList(PROBE_NAME_1)),

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Thomas Heslin <tjheslin1@gmail.com>.
+ * Copyright 2018 Thomas Heslin <tjheslin1@gmail.com>.
  *
  * This file is part of Patterdale-jvm.
  *
@@ -18,8 +18,6 @@
 package io.github.tjheslin1.patterdale.metrics.probe;
 
 import io.github.tjheslin1.patterdale.ValueType;
-
-import static java.lang.String.format;
 
 /**
  * The in-memory representation of probes list in 'patterdale.yml', passed in on app start-up.
@@ -44,8 +42,20 @@ public class Probe extends ValueType {
         return probe;
     }
 
-    public Probe dbLabelled(String databaseName) {
-        return probe(this.name, this.query, this.type, this.metricName, format("database=\"%s\",", databaseName) + this.metricLabels);
+    public Probe dbLabelled(DatabaseDefinition databaseDefinition) {
+        return probe(this.name, this.query, this.type, this.metricName, getMetricLabels(databaseDefinition));
+    }
+
+    private String getMetricLabels(DatabaseDefinition databaseDefinition) {
+        final StringBuilder builder = new StringBuilder("database=\"").append(databaseDefinition.name).append("\",");
+
+        if(databaseDefinition.metricLabels != null) {
+            databaseDefinition.metricLabels.forEach((label, value) -> builder.append(label).append("=\"").append(value).append("\","));
+        }
+
+        builder.append(this.metricLabels);
+
+        return builder.toString();
     }
 
     public String query() {

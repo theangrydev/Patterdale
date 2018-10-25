@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Thomas Heslin <tjheslin1@gmail.com>.
+ * Copyright 2018 Thomas Heslin <tjheslin1@gmail.com>.
  *
  * This file is part of Patterdale-jvm.
  *
@@ -15,18 +15,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.github.tjheslin1.patterdale;
+package io.github.tjheslin1.patterdale.metrics;
 
-import io.github.tjheslin1.patterdale.metrics.probe.DatabaseDefinition;
-import io.github.tjheslin1.patterdale.metrics.probe.Probe;
+import io.github.tjheslin1.patterdale.ValueType;
+import io.github.tjheslin1.patterdale.metrics.probe.OracleSQLProbe;
+import io.github.tjheslin1.patterdale.metrics.probe.ProbeResult;
 
 import java.util.List;
+import java.util.concurrent.Callable;
 
-public interface RuntimeParameters {
-    int httpPort();
-    long cacheDuration();
-    List<DatabaseDefinition> databases();
-    List<Probe> probes();
-    int connectionPoolMaxSize();
-    int connectionPoolMinIdle();
+public class ScrapeProbe extends ValueType implements Callable<List<ProbeResult>> {
+    private final OracleSQLProbe probe;
+
+    public ScrapeProbe(OracleSQLProbe probe) {
+        this.probe = probe;
+    }
+
+    @Override
+    public List<ProbeResult> call() {
+        return probe.probes();
+    }
 }

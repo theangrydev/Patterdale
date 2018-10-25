@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Thomas Heslin <tjheslin1@gmail.com>.
+ * Copyright 2018 Thomas Heslin <tjheslin1@gmail.com>.
  *
  * This file is part of Patterdale-jvm.
  *
@@ -17,9 +17,10 @@
  */
 package io.github.tjheslin1.patterdale.http.jetty;
 
-import io.github.tjheslin1.patterdale.RuntimeParameters;
+import io.github.tjheslin1.patterdale.config.RuntimeParameters;
 import io.github.tjheslin1.patterdale.http.*;
 import io.github.tjheslin1.patterdale.metrics.MetricsUseCase;
+import io.prometheus.client.CollectorRegistry;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
@@ -36,8 +37,8 @@ public class JettyWebServerBuilder implements WebServerBuilder {
     }
 
     @Override
-    public WebServerBuilder registerMetricsEndpoint(String path, MetricsUseCase metricsUseCase, RuntimeParameters runtimeParameters, long cacheDuration) {
-        servletContextHandler.addServlet(new ServletHolder(new MetricsServlet(metricsUseCase, logger, cacheDuration)), path);
+    public WebServerBuilder registerMetricsEndpoint(String path, MetricsUseCase metricsUseCase, RuntimeParameters runtimeParameters, CollectorRegistry registry, long cacheDuration) {
+        servletContextHandler.addServlet(new ServletHolder(new MetricsServlet(registry, metricsUseCase, logger, cacheDuration)), path);
         return this;
     }
 
@@ -54,6 +55,7 @@ public class JettyWebServerBuilder implements WebServerBuilder {
 
         servletContextHandler.addServlet(new ServletHolder(new NotFoundServlet()), "/");
         servletContextHandler.addServlet(new ServletHolder(new ReadyServlet()), "/ready");
+        servletContextHandler.addServlet(new ServletHolder(new StatusServlet()), "/status");
         servletContextHandler.setContextPath("/");
         server.setHandler(servletContextHandler);
         server.addBean(new UncaughtErrorHandler());

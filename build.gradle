@@ -1,59 +1,69 @@
-group 'io.github.tjheslin1'
-version '0.14.0'
-
 buildscript {
     repositories {
         jcenter()
     }
     dependencies {
         classpath 'com.github.jengelman.gradle.plugins:shadow:2.0.0'
+        classpath 'com.bmuschko:gradle-docker-plugin:3.0.11'
     }
 }
 
-apply plugin: 'com.github.johnrengelman.shadow'
-apply plugin: 'java'
+group 'io.github.tjheslin1'
+version '1.2.2'
 
-defaultTasks 'clean', 'test', 'shadowJar'
+apply plugin: 'java'
+apply plugin: 'com.github.johnrengelman.shadow'
+apply plugin: com.bmuschko.gradle.docker.DockerRemoteApiPlugin
 
 sourceCompatibility = 1.8
 
+def oracleUsername = hasProperty('mavenOracleUsername') ? mavenOracleUsername : System.getenv('mavenOracleUsername')
+def oraclePassword = hasProperty('mavenOraclePassword') ? mavenOraclePassword : System.getenv('mavenOraclePassword')
+
 repositories {
-    mavenCentral()
-    mavenLocal()
     jcenter()
+
+    maven {
+        url "https://www.oracle.com/content/secure/maven/content"
+        credentials {
+            username "${oracleUsername}"
+            password "${oraclePassword}"
+        }
+    }
 }
+
+defaultTasks 'clean', 'test', 'shadowJar', 'buildMyAppImage'
 
 dependencies {
     compile group: 'ch.qos.logback', name: 'logback-classic', version: '1.2.3'
 
     compile group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.8.8'
-    compile group: 'com.fasterxml.jackson.dataformat', name: 'jackson-dataformat-yaml', version: '2.8.8'
+    compile group: 'com.fasterxml.jackson.dataformat', name: 'jackson-dataformat-yaml', version: '2.9.0'
 
     compile group: 'org.apache.commons', name: 'commons-lang3', version: '3.4'
     compile group: 'org.apache.httpcomponents', name: 'httpclient', version: '4.5.2'
 
     compile group: 'com.google.guava', name: 'guava', version: '23.0'
+    compile group: 'commons-io', name: 'commons-io', version: '2.5'
 
     compile group: 'org.eclipse.jetty', name: 'jetty-server', version: '9.4.5.v20170502'
     compile group: 'org.eclipse.jetty', name: 'jetty-servlet', version: '9.4.5.v20170502'
 
-    if (project.hasProperty('bundleOjdbc')) {
-        if (bundleOjdbc == "yes") {
-            compile files('./repo/ojdbc7.jar')
-            println("Including odjdbc7.jar")
-        }
-    } else {
-        shadow files('./repo/ojdbc7.jar')
-        println("Ignoring odjdbc7.jar")
-    }
-    compile 'com.zaxxer:HikariCP:2.7.1'
+    compile 'net.jodah:failsafe:1.0.4'
+
+    compile group: 'io.prometheus', name: 'simpleclient', version: '0.1.0'
+    compile group: 'io.prometheus', name: 'simpleclient_hotspot', version: '0.1.0'
+    compile group: 'io.prometheus', name: 'simpleclient_common', version: '0.1.0'
+
+    compile group: 'com.oracle.jdbc', name: 'ojdbc8', version: '12.2.0.1'
+    compile 'com.zaxxer:HikariCP:2.7.6'
 
     testCompile group: 'junit', name: 'junit', version: '4.11'
     testCompile 'org.assertj:assertj-core:3.5.2'
 
     testCompile "org.mockito:mockito-core:2.2.9"
     testCompile 'io.github.tjheslin1:Westie:1.4.2'
-    testCompile group: 'commons-io', name: 'commons-io', version: '2.5'
+    testCompile group: 'com.h2database', name: 'h2', version: '1.4.196'
 }
 
 tasks.withType(AbstractCompile) {
@@ -72,10 +82,22 @@ shadowJar {
     version = null
 }
 
+task wrapper(type: Wrapper) {
+    gradleVersion = '4.2.1'
+}
+
+import com.bmuschko.gradle.docker.tasks.image.*
+
+task buildMyAppImage(type: DockerBuildImage) {
+    inputDir = file('.')
+    tag = 'tjheslin1/patterdale:DEV-SNAPSHOT'
+}
+
 task unitTest(type: Test) {
     exclude '**/endtoend/**'
 }
 
-task wrapper(type: Wrapper) {
-    gradleVersion = '3.5'
+task functionalTest(type: Test) {
+    exclude '**/io/github/tjheslin1/patterdale/**'
+    exclude 'staticanalysis'
 }

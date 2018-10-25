@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Thomas Heslin <tjheslin1@gmail.com>.
+ * Copyright 2018 Thomas Heslin <tjheslin1@gmail.com>.
  *
  * This file is part of Patterdale-jvm.
  *
@@ -19,39 +19,84 @@ package io.github.tjheslin1.patterdale.database.hikari;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import io.github.tjheslin1.patterdale.PatterdaleRuntimeParameters;
+import com.zaxxer.hikari.pool.HikariPool;
 import io.github.tjheslin1.patterdale.config.Passwords;
+import io.github.tjheslin1.patterdale.config.PatterdaleRuntimeParameters;
 import io.github.tjheslin1.patterdale.metrics.probe.DatabaseDefinition;
-import oracle.jdbc.pool.OracleDataSource;
+import net.jodah.failsafe.Failsafe;
+import net.jodah.failsafe.RetryPolicy;
 import org.slf4j.Logger;
 
-import static io.github.tjheslin1.patterdale.database.JdbcUrlFormatter.databaseUrlWithCredentials;
+import static java.lang.String.format;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class HikariDataSourceProvider {
+    /**
+     * Attempts to create a {@link HikariDataSource} by making an initial connection to the database.
+     * Retries a number of times, with a delay between each retry, according to the provided {@link PatterdaleRuntimeParameters}.
+     * <p>
+     * Failed attempts are logged as well as when the number of retries has exceeded.
+     *
+     * @param runtimeParams      The app configuration defined in `patterdale.yml`.
+     * @param databaseDefinition The details of the database being connected to.
+     * @param passwords          The separate store of passwords, the matching password will be found according to the `databaseDefinition`.
+     * @param logger             to log.
+     * @return A data source for a successful connection to the database.
+     */
+    public static HikariDataSource retriableDataSource(PatterdaleRuntimeParameters runtimeParams, DatabaseDefinition databaseDefinition, Passwords passwords, Logger logger) {
+        RetryPolicy retryPolicy = new RetryPolicy()
+                .retryOn(HikariPool.PoolInitializationException.class)
+                .withDelay(runtimeParams.connectionRetryDelayInSeconds(), SECONDS)
+                .withMaxRetries(runtimeParams.maxConnectionRetries());
 
-    public static HikariDataSource dataSource(PatterdaleRuntimeParameters runtimeParameters, DatabaseDefinition databaseDefinition, Passwords passwords, Logger logger) {
+        return Failsafe.with(retryPolicy)
+                .onRetry((result, failure, context) -> logRetry(runtimeParams, databaseDefinition, logger))
+                .onFailedAttempt((result, failure, context) -> logFailedAttempt(databaseDefinition, logger))
+                .onRetriesExceeded(throwable -> logRetriesExceeded(databaseDefinition, logger))
+                .get(() -> dataSource(runtimeParams, databaseDefinition, passwords, logger));
+    }
+
+    private static HikariDataSource dataSource(PatterdaleRuntimeParameters runtimeParameters, DatabaseDefinition databaseDefinition, Passwords passwords, Logger logger) {
         try {
-            OracleDataSource oracleDataSource = new OracleDataSource();
-            oracleDataSource.setUser(databaseDefinition.user);
-
             String password = passwords.byDatabaseName(databaseDefinition.name).value;
-            oracleDataSource.setPassword(password);
-
-            HikariDataSource hikariDataSource = new HikariDataSource(jdbcConfig(runtimeParameters, databaseDefinition, password));
-            hikariDataSource.setDataSource(oracleDataSource);
-            return hikariDataSource;
+            return new HikariDataSource(jdbcConfig(runtimeParameters, databaseDefinition, password));
         } catch (Exception e) {
             logger.error("Error occurred initialising Oracle and Hikari data sources.", e);
-            throw new IllegalStateException(e);
+            throw e;    // caught by the RetryPolicy
         }
     }
 
     private static HikariConfig jdbcConfig(PatterdaleRuntimeParameters runtimeParameters, DatabaseDefinition databaseDefinition, String password) {
         HikariConfig jdbcConfig = new HikariConfig();
+        jdbcConfig.setJdbcUrl(databaseDefinition.jdbcUrl);
+        jdbcConfig.setUsername(databaseDefinition.user);
+        jdbcConfig.setPassword(password);
         jdbcConfig.setPoolName("patterdale-pool-" + databaseDefinition.name);
         jdbcConfig.setMaximumPoolSize(runtimeParameters.connectionPoolMaxSize());
         jdbcConfig.setMinimumIdle(runtimeParameters.connectionPoolMinIdle());
-        jdbcConfig.setJdbcUrl(databaseUrlWithCredentials(databaseDefinition.jdbcUrl, databaseDefinition.user, password));
+        jdbcConfig.setJdbcUrl(databaseDefinition.jdbcUrl);
+        jdbcConfig.setInitializationFailTimeout(SECONDS.toMillis(runtimeParameters.probeConnectionWaitInSeconds()));
         return jdbcConfig;
+    }
+
+    private static void logRetriesExceeded(DatabaseDefinition databaseDefinition, Logger logger) {
+        logger.error(format("Exceeded retry attempts to database %s at %s.",
+                databaseDefinition.name,
+                databaseDefinition.jdbcUrl));
+    }
+
+    private static void logFailedAttempt(DatabaseDefinition databaseDefinition, Logger logger) {
+        logger.warn(format("Failed attempt connecting to database %s at %s." +
+                        databaseDefinition.name,
+                databaseDefinition.jdbcUrl));
+    }
+
+    private static void logRetry(PatterdaleRuntimeParameters runtimeParams, DatabaseDefinition databaseDefinition, Logger logger) {
+        logger.info(format("Attempting database connection to: %s at %s.%n" +
+                        "Configured to retry %d times with a delay between retries of %d seconds.",
+                databaseDefinition.name,
+                databaseDefinition.jdbcUrl,
+                runtimeParams.maxConnectionRetries(),
+                runtimeParams.connectionRetryDelayInSeconds()));
     }
 }

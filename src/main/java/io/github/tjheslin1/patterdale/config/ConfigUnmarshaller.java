@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Thomas Heslin <tjheslin1@gmail.com>.
+ * Copyright 2018 Thomas Heslin <tjheslin1@gmail.com>.
  *
  * This file is part of Patterdale-jvm.
  *
@@ -44,13 +44,11 @@ public class ConfigUnmarshaller {
      * @return an in memory representation of the config.
      */
     public PatterdaleConfig parseConfig(File configFile) {
-        PatterdaleConfig config;
         ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
         try {
-            config = mapper.readValue(configFile, PatterdaleConfig.class);
-            return config;
+            return mapper.readValue(configFile, PatterdaleConfig.class);
         } catch (IOException e) {
-            logger.error("Failed to parse provided system property 'config.file'.", e);
+            logger.error(format("Failed to parse provided file '%s'.", configFile.getName()), e);
             throw new IllegalArgumentException(format("Error occurred reading config file '%s'.", configFile.getName()), e);
         }
     }
